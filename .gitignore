@@ -50,3 +50,4 @@ crashlytics-build.properties
 # ---- OS clutter ----
 .DS_Store
 Thumbs.db
+*.slnx
