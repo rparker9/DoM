@@ -1,37 +1,35 @@
 namespace Dungeon.Sim
 {
-    public enum SimEventType { Stepped, Faced, UsedMove, Damaged, Died }
+    public enum SimEventType
+    {
+        Stepped,    // Actor walked From -> To
+        Faced,      // Actor turned to Dir (free action)
+        UsedMove,   // Actor used Move toward Dir; Targets = every enemy hit (may be empty)
+        Damaged,    // Target took Damage from Actor
+        Died        // Actor died at From
+    }
 
-    /// <summary>
-    /// A record of one thing that happened. The only thing the view ever sees.
-    /// Every event fills From/To with the tiles it concerns.
-    ///   Stepped:  Actor walks From -> To.
-    ///   Faced:    Actor turns to Dir (free action). From = To = actor tile.
-    ///   UsedMove: Actor (at From) uses Move toward Dir. To = the tile in front.
-    ///             Targets = every enemy hit (may be empty). UsesMove = true.
-    ///   Damaged:  Target (at From) takes Damage from Actor; HpAfter = HP after.
-    ///   Died:     Actor dies at From.
-    /// </summary>
+    /// <summary>A record of one thing that happened in the sim. The only thing playback ever sees.</summary>
     public sealed class SimEvent
     {
         static readonly Entity[] NoTargets = new Entity[0];
 
-        public int Id;
-        public long Tick;
+        public int Id;                          // set by World.Record, in the order things happened
+        public long Tick;                       // sim time it happened
         public SimEventType Type;
-        public Entity Actor = Entity.None;
-        public Entity Target = Entity.None;
-        public Entity[] Targets = NoTargets;
-        public MoveDef Move;
-        public int FromX, FromY, ToX, ToY;
-        public int DirX, DirY;
-        public int Damage, HpAfter;
-        public bool UsesMove;
-        public int CausedByEventId = -1;   // Id of the event this one follows from (-1 = none)
+        public Entity Actor = Entity.None;      // who did it (for Died: who died)
+        public Entity Target = Entity.None;     // Damaged only: who was hit
+        public Entity[] Targets = NoTargets;    // UsedMove only
+        public MoveDef Move;                    // UsedMove only
+        public int FromX, FromY, ToX, ToY;      // tiles involved; From = To when only one tile matters
+        public int DirX, DirY;                  // facing direction, for Stepped, Faced and UsedMove
+        public int Damage, HpAfter;             // Damaged only
+        public bool UsesMove;                   // true for UsedMove; the input gate waits for these
+        public int CausedByEventId = -1;        // the event this one follows from, or -1
 
         public override string ToString() =>
             $"#{Id} t{Tick} {Type} actor={Actor} target={Target} ({FromX},{FromY})->({ToX},{ToY})" +
             (Move != null ? $" move={Move.Name}" : "") +
-            (UsesMove ? " [uses move]" : "") + (CausedByEventId >= 0 ? $" cause=#{CausedByEventId}" : "");
+            (CausedByEventId >= 0 ? $" cause=#{CausedByEventId}" : "");
     }
 }

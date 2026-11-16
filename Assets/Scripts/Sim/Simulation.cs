@@ -6,54 +6,75 @@ namespace Dungeon.Sim
     public enum SimStatus { AwaitingInput, GameOver }
 
     /// <summary>
-    /// Resolves turns instantly. RunUntilPlayerTurn() runs AI turns until the leader
-    /// (the party member the player controls) is up, then stops.
-    /// The view takes the recorded events and plays them back on its own clock.
+    /// The turn engine. Resolves turns instantly and records each change as a SimEvent.
+    /// It runs AI turns until it's the leader's turn, then waits for the player.
     /// </summary>
     public sealed class Simulation
     {
         public readonly World World;
+
+        /// <summary>The leader, while the sim waits for the player. None otherwise.</summary>
         public Entity ActorWaitingForInput { get; private set; } = Entity.None;
+
         public SimStatus Status { get; private set; } = SimStatus.AwaitingInput;
 
-        const int MaxTurnsPerRun = 100000;
-        readonly List<Entity> _targets = new List<Entity>();   // reused by DoUseMove
+        const int MaxTurnsPerRun = 100000;   // safety net against an endless loop
+        readonly List<Entity> _targets = new List<Entity>();
 
+        /// <param name="world">The state this sim reads and changes.</param>
         public Simulation(World world) { World = world; }
 
-        /// <summary>Only the current leader is player-controlled. Everyone else uses AI.</summary>
+        /// <summary>Only the leader is player-controlled. Everyone else uses AI.</summary>
         public bool IsPlayerControlled(Entity e) => e == World.Leader;
 
+        // =====================================================================================
+        //  Running turns
+        // =====================================================================================
+
+        /// <summary>Resolves turns in order until it's the leader's turn or the party is gone.</summary>
+        /// <returns>AwaitingInput, or GameOver.</returns>
         public SimStatus RunUntilPlayerTurn()
         {
             for (int i = 0; i < MaxTurnsPerRun; i++)
             {
-                // The leader fell: control passes to the next living party member.
-                if (!World.IsAlive(World.Leader) && !PickNewLeader())
-                {
-                    ActorWaitingForInput = Entity.None;
-                    return Status = SimStatus.GameOver;   // the whole party is down
-                }
-
+                if (!World.IsAlive(World.Leader) && !PickNewLeader()) return EndGame();
                 if (!ActorWaitingForInput.IsNone) return Status = SimStatus.AwaitingInput;
-
-                if (!World.Turns.TryTakeNext(out var turn)) return Status = SimStatus.GameOver;
-                if (!World.IsAlive(turn.Entity)) continue;   // stale entry for a dead entity
+                if (!World.Turns.TryTakeNext(out var turn)) return EndGame();
+                if (!World.IsAlive(turn.Entity)) continue;   // a dead actor's leftover turn
 
                 World.Tick = turn.Tick;
 
-                if (IsPlayerControlled(turn.Entity)) { ActorWaitingForInput = turn.Entity; continue; }
-
-                ResolveAction(turn.Entity, AiBrain.Decide(World, turn.Entity));
+                if (IsPlayerControlled(turn.Entity)) ActorWaitingForInput = turn.Entity;   // stop next loop
+                else ResolveAction(turn.Entity, AiBrain.Decide(World, turn.Entity));
             }
-            throw new InvalidOperationException("RunUntilPlayerTurn exceeded turn limit.");
+            throw new InvalidOperationException("RunUntilPlayerTurn exceeded its turn limit.");
         }
 
-        public void EndGame() { ActorWaitingForInput = Entity.None; Status = SimStatus.GameOver; }
+        /// <summary>Ends the game right away.</summary>
+        /// <returns>GameOver, so RunUntilPlayerTurn can return it directly.</returns>
+        public SimStatus EndGame()
+        {
+            ActorWaitingForInput = Entity.None;
+            return Status = SimStatus.GameOver;
+        }
 
-        // ---------- player commands ----------
+        /// <summary>When the leader dies, the first living party member takes over.</summary>
+        /// <returns>False if the whole party is down.</returns>
+        bool PickNewLeader()
+        {
+            foreach (var member in World.Party)
+                if (World.IsAlive(member)) { World.Leader = member; return true; }
+            World.Leader = Entity.None;
+            return false;
+        }
 
-        /// <summary>Resolves a timed action for the waiting actor, then runs until the next player turn. False if invalid.</summary>
+        // =====================================================================================
+        //  Player commands
+        // =====================================================================================
+
+        /// <summary>Resolves the leader's action, then runs everyone else until the leader's next turn.</summary>
+        /// <param name="action">What the leader does.</param>
+        /// <returns>False if it isn't the player's turn or the action isn't possible.</returns>
         public bool DoPlayerAction(GameAction action)
         {
             if (Status != SimStatus.AwaitingInput || ActorWaitingForInput.IsNone) return false;
@@ -67,26 +88,31 @@ namespace Dungeon.Sim
             return true;
         }
 
-        /// <summary>Free action: turn the waiting actor without spending time.</summary>
+        /// <summary>Free action: the leader turns without using its turn. Records nothing if already facing that way.</summary>
+        /// <param name="dx">Direction x (-1, 0, 1).</param>
+        /// <param name="dy">Direction y (-1, 0, 1).</param>
         public void Face(int dx, int dy)
         {
-            if (ActorWaitingForInput.IsNone || (dx == 0 && dy == 0)) return;
-            var f = World.Facings.Get(ActorWaitingForInput.Id);
+            var e = ActorWaitingForInput;
+            if (e.IsNone || (dx == 0 && dy == 0)) return;
+            var f = World.Facings.Get(e.Id);
             if (f.Dx == dx && f.Dy == dy) return;
-            SetFacing(ActorWaitingForInput, dx, dy);
-            var p = World.Positions.Get(ActorWaitingForInput.Id);
+
+            SetFacing(e, dx, dy);
+            var p = World.Positions.Get(e.Id);
             World.Record(new SimEvent
             {
-                Type = SimEventType.Faced, Actor = ActorWaitingForInput,
+                Type = SimEventType.Faced, Actor = e,
                 FromX = p.X, FromY = p.Y, ToX = p.X, ToY = p.Y, DirX = dx, DirY = dy
             });
         }
 
         /// <summary>
-        /// Free action, only on the leader's turn: hand the current turn to another living party member.
-        /// The two swap places in the turn queue. The new leader acts now, and the old leader takes
-        /// the new leader's next turn (and goes back to party AI). Nobody gains or loses a turn.
+        /// Free action on the leader's turn: another party member becomes leader and acts now.
+        /// The two swap places in the turn queue, so nobody gains or loses a turn.
         /// </summary>
+        /// <param name="member">A living party member who isn't the leader.</param>
+        /// <returns>False if the swap isn't allowed.</returns>
         public bool SwapLeader(Entity member)
         {
             if (Status != SimStatus.AwaitingInput || ActorWaitingForInput.IsNone) return false;
@@ -100,51 +126,47 @@ namespace Dungeon.Sim
             return true;
         }
 
-        /// <summary>Makes the first living party member the leader. False if none are left.</summary>
-        bool PickNewLeader()
-        {
-            foreach (var member in World.Party)
-                if (World.IsAlive(member)) { World.Leader = member; return true; }
-            World.Leader = Entity.None;
-            return false;
-        }
-
-        /// <summary>Free action: change a party member's orders. They apply whenever that member isn't the leader.</summary>
+        /// <summary>Free action: sets a party member's orders, used whenever it isn't the leader.</summary>
+        /// <param name="member">The party member.</param>
+        /// <param name="type">Follow, Hold or AttackTarget.</param>
+        /// <param name="target">The enemy to attack (AttackTarget only).</param>
         public void SetOrders(Entity member, OrderType type, Entity target)
         {
             if (!World.IsAlive(member) || !World.Orders.Has(member.Id)) return;
             World.Orders.Get(member.Id) = new Orders { Type = type, Target = target };
         }
 
-        // ---------- resolution ----------
-
-        /// <summary>True if the actor has a move in this slot (0 = first move).</summary>
+        /// <param name="e">The actor.</param>
+        /// <param name="slot">Move slot, 0 = first.</param>
+        /// <returns>True if the actor is alive and has a move in that slot.</returns>
         public bool HasMove(Entity e, int slot)
         {
             if (!World.IsAlive(e) || !World.Kinds.Has(e.Id)) return false;
-            var moves = World.Kinds.Get(e.Id).Def.Moves;
-            return slot >= 0 && slot < moves.Count;
+            return slot >= 0 && slot < World.Kinds.Get(e.Id).Def.Moves.Count;
         }
 
+        // =====================================================================================
+        //  Resolving actions
+        // =====================================================================================
+
+        /// <summary>Carries out an action, then schedules the actor's next turn based on its cost.</summary>
         void ResolveAction(Entity e, GameAction a)
         {
-            int cost;
-            switch (a.Type)
+            int cost = ActionCosts.Wait;   // Wait, and anything that fails, costs a normal turn
+            if (a.Type == ActionType.Step && Rules.CanStep(World, e, a.Dx, a.Dy))
             {
-                case ActionType.Step:
-                    if (Rules.CanStep(World, e, a.Dx, a.Dy)) { DoStep(e, a.Dx, a.Dy); cost = ActionCosts.Step; }
-                    else cost = ActionCosts.Wait;   // blocked step degrades to waiting
-                    break;
-                case ActionType.UseMove:
-                    cost = DoUseMove(e, a.Slot, a.Dx, a.Dy);
-                    break;
-                default:
-                    cost = ActionCosts.Wait;
-                    break;
+                DoStep(e, a.Dx, a.Dy);
+                cost = ActionCosts.Step;
             }
+            else if (a.Type == ActionType.UseMove && HasMove(e, a.Slot))
+            {
+                cost = DoUseMove(e, a.Slot, a.Dx, a.Dy);
+            }
+
             if (World.IsAlive(e)) ScheduleNextTurn(e, cost);
         }
 
+        /// <summary>Next turn = now + cost * 100 / speed. Faster actors come back sooner.</summary>
         void ScheduleNextTurn(Entity e, int cost)
         {
             int speed = Math.Max(1, World.Speeds.Get(e.Id).Percent);
@@ -152,9 +174,9 @@ namespace Dungeon.Sim
             World.Turns.Schedule(e, World.Tick + delay, World.Actors.Get(e.Id).Initiative);
         }
 
-        void SetFacing(Entity e, int dx, int dy) =>
-            World.Facings.Set(e.Id, new Facing { Dx = dx, Dy = dy });
+        void SetFacing(Entity e, int dx, int dy) => World.Facings.Set(e.Id, new Facing { Dx = dx, Dy = dy });
 
+        /// <summary>Moves one tile. The caller has already checked CanStep.</summary>
         void DoStep(Entity e, int dx, int dy)
         {
             var p = World.Positions.Get(e.Id);
@@ -168,10 +190,14 @@ namespace Dungeon.Sim
             });
         }
 
-        /// <summary>Uses one of the actor's moves. Returns its energy cost.</summary>
+        /// <summary>Uses a move and damages every enemy it hits. The caller has already checked HasMove.</summary>
+        /// <param name="e">The user.</param>
+        /// <param name="slot">Move slot, 0 = first.</param>
+        /// <param name="dx">Direction x, or 0 with dy = 0 to use the current facing.</param>
+        /// <param name="dy">Direction y.</param>
+        /// <returns>The move's energy cost.</returns>
         int DoUseMove(Entity e, int slot, int dx, int dy)
         {
-            if (!HasMove(e, slot)) return ActionCosts.Wait;
             var def = World.Kinds.Get(e.Id).Def;
             var move = def.Moves[slot];
 
@@ -184,7 +210,7 @@ namespace Dungeon.Sim
 
             var p = World.Positions.Get(e.Id);
             MoveTargeting.FindTargets(World, e, move, dx, dy, _targets);
-            var targets = _targets.ToArray();
+            var targets = _targets.ToArray();   // copied: the event keeps it after _targets is reused
 
             var used = World.Record(new SimEvent
             {
@@ -199,6 +225,11 @@ namespace Dungeon.Sim
             return Math.Max(1, move.EnergyCost);
         }
 
+        /// <summary>Lowers HP, and destroys the victim if it reaches 0.</summary>
+        /// <param name="attacker">Who dealt the damage.</param>
+        /// <param name="victim">Who takes it.</param>
+        /// <param name="damage">How much.</param>
+        /// <param name="causeEventId">The UsedMove event, so playback shows the hit first.</param>
         void DealDamage(Entity attacker, Entity victim, int damage, int causeEventId)
         {
             if (!World.IsAlive(victim)) return;
@@ -206,7 +237,7 @@ namespace Dungeon.Sim
 
             ref var hp = ref World.Healths.Get(victim.Id);
             hp.Hp = Math.Max(0, hp.Hp - damage);
-            int hpAfter = hp.Hp;
+            int hpAfter = hp.Hp;   // read now: Destroy below removes the component
 
             var hurt = World.Record(new SimEvent
             {

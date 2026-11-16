@@ -1,31 +1,35 @@
 namespace Dungeon.Sim
 {
+    // Components: plain data attached to entities. No logic here.
+
+    /// <summary>Tile the entity stands on.</summary>
     public struct Position { public int X, Y; }
+
+    /// <summary>Direction the entity faces, each -1, 0 or 1.</summary>
     public struct Facing { public int Dx, Dy; }
+
     public struct Health { public int Hp, Max; }
 
-    /// <summary>100 = normal. Turn delay = energyCost * 100 / Percent.</summary>
+    /// <summary>100 = normal. Copied from the ActorDef so effects can change it later.</summary>
     public struct Speed { public int Percent; }
 
-    /// <summary>Which ActorDef this entity was spawned from (its stats and moves).</summary>
+    /// <summary>The ActorDef this entity was spawned from: its name, stats and moves.</summary>
     public struct Kind { public ActorDef Def; }
 
     public enum Team { Party, Monsters }
+
+    /// <summary>Which side the entity is on. Party members use the party AI; monsters use monster AI.</summary>
     public struct Faction { public Team Team; }
 
-    /// <summary>Which AI an actor uses when the player isn't controlling it.</summary>
-    public enum ControlMode
-    {
-        Monster,   // monster AI
-        Party      // party AI: follows the team's orders. Whichever member is the leader is player-controlled.
-    }
-    public struct Controller { public ControlMode Mode; }
-
     public enum OrderType { Follow, Hold, AttackTarget }
-    public struct Orders { public OrderType Type; public Entity Target; }
 
-    /// <summary>Lower initiative acts first when two actors share a tick.</summary>
+    /// <summary>What a party member does when it isn't the leader.</summary>
+    public struct Orders
+    {
+        public OrderType Type;
+        public Entity Target;   // AttackTarget only
+    }
+
+    /// <summary>Breaks ties in the turn queue: lower initiative acts first on the same tick.</summary>
     public struct Actor { public int Initiative; }
-
-    public struct Name { public string Value; }
 }

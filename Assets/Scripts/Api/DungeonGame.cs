@@ -62,7 +62,6 @@ namespace Dungeon.Api
         readonly Simulation _sim;
         readonly EventPlayer _eventPlayer;
 
-        // --- the rest of the state kept here for convenience and to enforce rules ---
         readonly List<Entity> _actors = new List<Entity>();
         readonly Dictionary<Entity, ActorDef> _defOf = new Dictionary<Entity, ActorDef>();  // kept after death
         readonly List<SimEvent> _newEvents = new List<SimEvent>();
@@ -168,17 +167,17 @@ namespace Dungeon.Api
         /// Adds a member to your party. All members are equal: whoever you control is the leader,
         /// and the rest use the party AI. The first member spawned starts as leader.
         /// </summary>
-        public Entity SpawnPartyMember(ActorDef def, int x, int y) => Spawn(def, Team.Party, ControlMode.Party, x, y);
+        public Entity SpawnPartyMember(ActorDef def, int x, int y) => Spawn(def, Team.Party, x, y);
 
-        public Entity SpawnMonster(ActorDef def, int x, int y) => Spawn(def, Team.Monsters, ControlMode.Monster, x, y);
+        public Entity SpawnMonster(ActorDef def, int x, int y) => Spawn(def, Team.Monsters, x, y);
 
-        Entity Spawn(ActorDef def, Team team, ControlMode mode, int x, int y)
+        Entity Spawn(ActorDef def, Team team, int x, int y)
         {
             RequireNotBegun("Spawn");
             if (def == null) throw new ArgumentNullException(nameof(def));
             if (!IsFree(x, y)) throw new ArgumentException($"Can't spawn {def.Name} at ({x},{y}): the tile is a wall or taken.");
 
-            var e = _world.SpawnActor(def, team, mode, x, y);
+            var e = _world.SpawnActor(def, team, x, y);
             _actors.Add(e);
             _defOf[e] = def;
             return e;
