@@ -37,6 +37,19 @@ public sealed class EntityView : MonoBehaviour
         return view;
     }
 
+    static Shader _flatShader;
+
+    /// <summary>Flat-color shader for the gray boxes. Sprites/Default renders in every render pipeline.</summary>
+    public static Shader FlatShader
+    {
+        get
+        {
+            if (_flatShader == null) _flatShader = Shader.Find("Sprites/Default");
+            if (_flatShader == null) _flatShader = Shader.Find("Unlit/Color");
+            return _flatShader;
+        }
+    }
+
     public static Renderer MakeQuad(Transform parent, string name, Vector3 localPos, Vector3 scale, Color color, Shader shader)
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Quad);

@@ -62,6 +62,7 @@ namespace Dungeon.Api
         readonly Simulation _sim;
         readonly EventPlayer _eventPlayer;
 
+        // --- the rest of the state kept here for convenience and to enforce rules ---
         readonly List<Entity> _actors = new List<Entity>();
         readonly Dictionary<Entity, ActorDef> _defOf = new Dictionary<Entity, ActorDef>();  // kept after death
         readonly List<SimEvent> _newEvents = new List<SimEvent>();
