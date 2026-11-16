@@ -1,0 +1,6 @@
+﻿<Solution>
+  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Dungeon.Sim.csproj" />
+  <Project Path="Dungeon.Playback.csproj" />
+  <Project Path="Dungeon.Api.csproj" />
+</Solution>
