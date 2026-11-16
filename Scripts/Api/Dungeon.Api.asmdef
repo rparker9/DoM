@@ -1,0 +1,17 @@
+{
+    "name": "Dungeon.Api",
+    "rootNamespace": "Dungeon.Api",
+    "references": [
+        "Dungeon.Sim",
+        "Dungeon.Playback"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
