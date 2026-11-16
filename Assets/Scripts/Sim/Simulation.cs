@@ -19,10 +19,14 @@ namespace Dungeon.Sim
         public SimStatus Status { get; private set; } = SimStatus.AwaitingInput;
 
         const int MaxTurnsPerRun = 100000;   // safety net against an endless loop
-        readonly List<Entity> _targets = new List<Entity>();
+        readonly MoveRunner _moves;
 
         /// <param name="world">The state this sim reads and changes.</param>
-        public Simulation(World world) { World = world; }
+        public Simulation(World world)
+        {
+            World = world;
+            _moves = new MoveRunner(world);
+        }
 
         /// <summary>Only the leader is player-controlled. Everyone else uses AI.</summary>
         public bool IsPlayerControlled(Entity e) => e == World.Leader;
@@ -160,7 +164,7 @@ namespace Dungeon.Sim
             }
             else if (a.Type == ActionType.UseMove && HasMove(e, a.Slot))
             {
-                cost = DoUseMove(e, a.Slot, a.Dx, a.Dy);
+                cost = _moves.Run(e, World.Kinds.Get(e.Id).Def.Moves[a.Slot], a.Dx, a.Dy);
             }
 
             if (World.IsAlive(e)) ScheduleNextTurn(e, cost);
@@ -187,107 +191,6 @@ namespace Dungeon.Sim
             {
                 Type = SimEventType.Stepped, Actor = e,
                 FromX = p.X, FromY = p.Y, ToX = tx, ToY = ty, DirX = dx, DirY = dy
-            });
-        }
-
-        /// <summary>Uses a move and damages every enemy it hits. The caller has already checked HasMove.</summary>
-        /// <param name="e">The user.</param>
-        /// <param name="slot">Move slot, 0 = first.</param>
-        /// <param name="dx">Direction x, or 0 with dy = 0 to use the current facing.</param>
-        /// <param name="dy">Direction y.</param>
-        /// <returns>The move's energy cost.</returns>
-        int DoUseMove(Entity e, int slot, int dx, int dy)
-        {
-            var def = World.Kinds.Get(e.Id).Def;
-            var move = def.Moves[slot];
-
-            if (dx == 0 && dy == 0)
-            {
-                var f = World.Facings.Get(e.Id);
-                dx = f.Dx; dy = f.Dy;
-            }
-            SetFacing(e, dx, dy);
-
-            var p = World.Positions.Get(e.Id);
-            MoveTargeting.FindTargets(World, e, move, dx, dy, _targets);
-            var targets = _targets.ToArray();   // copied: the event keeps it after _targets is reused
-
-            var used = World.Record(new SimEvent
-            {
-                Type = SimEventType.UsedMove, Actor = e, Move = move, Targets = targets,
-                FromX = p.X, FromY = p.Y, ToX = p.X + dx, ToY = p.Y + dy, DirX = dx, DirY = dy,
-                UsesMove = true
-            });
-
-            if (move.Effect == MoveEffect.Heal)
-            {
-                foreach (var ally in targets) Heal(e, ally, move.Power, used.Id);
-            }
-            else
-            {
-                int damage = Math.Max(1, move.Power + def.Attack);
-                foreach (var victim in targets) DealDamage(e, victim, damage, used.Id);
-            }
-
-            return Math.Max(1, move.EnergyCost);
-        }
-
-        /// <summary>Lowers HP, and destroys the victim if it reaches 0.</summary>
-        /// <param name="attacker">Who dealt the damage.</param>
-        /// <param name="victim">Who takes it.</param>
-        /// <param name="damage">How much.</param>
-        /// <param name="causeEventId">The UsedMove event, so playback shows the hit first.</param>
-        void DealDamage(Entity attacker, Entity victim, int damage, int causeEventId)
-        {
-            if (!World.IsAlive(victim)) return;
-            var pos = World.Positions.Get(victim.Id);
-
-            ref var hp = ref World.Healths.Get(victim.Id);
-            hp.Hp = Math.Max(0, hp.Hp - damage);
-            int hpAfter = hp.Hp;   // read now: Destroy below removes the component
-
-            var hurt = World.Record(new SimEvent
-            {
-                Type = SimEventType.Damaged, Actor = attacker, Target = victim,
-                FromX = pos.X, FromY = pos.Y, ToX = pos.X, ToY = pos.Y,
-                Damage = damage, HpAfter = hpAfter, CausedByEventId = causeEventId
-            });
-
-            if (hpAfter > 0) return;
-            World.Record(new SimEvent
-            {
-                Type = SimEventType.Died, Actor = victim,
-                FromX = pos.X, FromY = pos.Y, ToX = pos.X, ToY = pos.Y, CausedByEventId = hurt.Id
-            });
-            World.Destroy(victim);
-        }
-
-        /// <summary>Restores HP, never above max.</summary>
-        /// <param name="healer">Who used the move.</param>
-        /// <param name="ally">Who gets the HP.</param>
-        /// <param name="amount">How much to restore.</param>
-        /// <param name="causeEventId">The UsedMove event, so playback shows the move first.</param>
-        void Heal(Entity healer, Entity ally, int amount, int causeEventId)
-        {
-            if (!World.IsAlive(ally)) return;
-            var pos = World.Positions.Get(ally.Id);
-
-            ref var hp = ref World.Healths.Get(ally.Id);
-            int before = hp.Hp;
-            hp.Hp = Math.Min(hp.Max, hp.Hp + amount);
-
-            World.Record(new SimEvent
-            {
-                Type = SimEventType.Healed,
-                Actor = healer,
-                Target = ally,
-                FromX = pos.X,
-                FromY = pos.Y,
-                ToX = pos.X,
-                ToY = pos.Y,
-                Healing = hp.Hp - before,
-                HpAfter = hp.Hp,
-                CausedByEventId = causeEventId
             });
         }
     }

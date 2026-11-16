@@ -3,58 +3,107 @@ using System.Collections.Generic;
 
 namespace Dungeon.Sim
 {
-    /// <summary>This static class finds the targets of a move (who it would affect) without actually doing any damage or healing.</summary>
+    /// <summary>Works out who a move affects and where it lands, without changing anything.</summary>
     public static class MoveTargeting
     {
-        /// <summary>Finds everyone the move would affect: enemies for damage moves, allies for heal moves.</summary>
+        /// <summary>Finds everyone the move would affect.</summary>
         /// <param name="w">The world.</param>
         /// <param name="user">Who uses the move.</param>
         /// <param name="move">The move.</param>
-        /// <param name="dx">Direction x (-1, 0, 1). Ignored by AllAround moves.</param>
-        /// <param name="dy">Direction y (-1, 0, 1). Ignored by AllAround moves.</param>
+        /// <param name="dx">Direction x (-1, 0, 1). Only Line moves use it.</param>
+        /// <param name="dy">Direction y (-1, 0, 1). Only Line moves use it.</param>
         /// <param name="into">Cleared, then filled with everyone affected.</param>
-        public static void FindTargets(World w, Entity user, MoveDef move, int dx, int dy, List<Entity> into)
+        public static void FindTargets(World w, Entity user, MoveDef move, int dx, int dy, List<Entity> into) =>
+            Resolve(w, user, move, dx, dy, into, out _, out _);
+
+        /// <summary>Finds everyone the move would affect, and the tile it lands on.</summary>
+        /// <param name="w">The world.</param>
+        /// <param name="user">Who uses the move.</param>
+        /// <param name="move">The move.</param>
+        /// <param name="dx">Direction x (-1, 0, 1). Only Line moves use it.</param>
+        /// <param name="dy">Direction y (-1, 0, 1). Only Line moves use it.</param>
+        /// <param name="into">Cleared, then filled with everyone affected.</param>
+        /// <param name="impactX">Where it lands: the first actor or wall hit, the end of the range, or the user.</param>
+        /// <param name="impactY">See impactX.</param>
+        public static void Resolve(World w, Entity user, MoveDef move, int dx, int dy, List<Entity> into,
+                                   out int impactX, out int impactY)
         {
             into.Clear();
             var p = w.Positions.Get(user.Id);
+            impactX = p.X;
+            impactY = p.Y;
 
-            if (move.Shape == MoveShape.AllAround)
+            switch (move.Area)
             {
-                if (move.Effect == MoveEffect.Heal) into.Add(user);   // an all-around heal includes the user
-                for (int i = 0; i < 8; i++)
-                    AddIfTarget(w, user, move, p.X, p.Y, Rules.DirX[i], Rules.DirY[i], into);
-                return;
+                case MoveArea.Self:
+                    into.Add(user);
+                    return;
+
+                case MoveArea.Team:
+                    for (int i = 0; i < w.Factions.Count; i++)
+                    {
+                        var other = w.HandleOf(w.Factions.IdAt(i));
+                        if (!Rules.IsHostile(w, user, other) && Matches(w, user, move.Filter, other)) into.Add(other);
+                    }
+                    return;
+
+                case MoveArea.Around:
+                    AddArea(w, user, move, p.X, p.Y, Math.Max(1, move.Range), into);
+                    return;
             }
 
-            // Line: walk forward until something blocks it.
+            // Line: walk forward until something stops it.
             if (dx == 0 && dy == 0) return;
-            if (!Rules.CornerClear(w.Map, p.X, p.Y, dx, dy)) return;
+            if (!Rules.CornerClear(w.Map, p.X, p.Y, dx, dy)) return;   // fizzles against the corner
 
             int x = p.X, y = p.Y;
             for (int step = 1; step <= Math.Max(1, move.Range); step++)
             {
                 x += dx; y += dy;
-                if (w.Map.IsWall(x, y)) return;
+                impactX = x; impactY = y;
+                if (w.Map.IsWall(x, y)) break;
+
                 var other = w.Map.OccupantAt(x, y);
                 if (other.IsNone) continue;
-                if (IsTarget(w, user, move, other)) into.Add(other);
-                return;   // stops at the first actor, friend or foe
+                if (Matches(w, user, move.Filter, other)) into.Add(other);
+                if (!move.Pierce) break;   // stops at the first actor, friend or foe
+            }
+
+            // A burst replaces the line's own hits with everyone around the impact tile.
+            if (move.BurstRadius > 0)
+            {
+                into.Clear();
+                AddArea(w, user, move, impactX, impactY, move.BurstRadius, into);
             }
         }
 
-        /// <summary>Damage moves affect enemies; heal moves affect allies.</summary>
-        static bool IsTarget(World w, Entity user, MoveDef move, Entity other)
+        /// <summary>Adds everyone within radius of (cx, cy) that the filter allows, in a fixed order.</summary>
+        static void AddArea(World w, Entity user, MoveDef move, int cx, int cy, int radius, List<Entity> into)
         {
-            bool enemy = Rules.IsHostile(w, user, other);
-            return move.Effect == MoveEffect.Heal ? !enemy : enemy;
+            for (int oy = -radius; oy <= radius; oy++)
+            for (int ox = -radius; ox <= radius; ox++)
+            {
+                // Right next to the center, wall corners still block (the Mystery Dungeon rule).
+                bool adjacent = Math.Max(Math.Abs(ox), Math.Abs(oy)) == 1;
+                if (adjacent && !Rules.CornerClear(w.Map, cx, cy, ox, oy)) continue;
+
+                var other = w.Map.OccupantAt(cx + ox, cy + oy);
+                if (!other.IsNone && Matches(w, user, move.Filter, other)) into.Add(other);
+            }
         }
 
-        /// <summary>Adds whoever stands one tile away in (dx, dy), if the move affects them and no wall corner is in the way.</summary>
-        static void AddIfTarget(World w, Entity user, MoveDef move, int x, int y, int dx, int dy, List<Entity> into)
+        /// <summary>True if the filter lets this move affect other.</summary>
+        static bool Matches(World w, Entity user, TargetFilter filter, Entity other)
         {
-            if (!Rules.CornerClear(w.Map, x, y, dx, dy)) return;
-            var other = w.Map.OccupantAt(x + dx, y + dy);
-            if (!other.IsNone && IsTarget(w, user, move, other)) into.Add(other);
+            bool enemy = Rules.IsHostile(w, user, other);
+            bool self = other == user;
+            switch (filter)
+            {
+                case TargetFilter.Enemies: return enemy;
+                case TargetFilter.Allies: return !enemy && !self;
+                case TargetFilter.AlliesAndSelf: return !enemy;
+                default: return !self;   // Everyone
+            }
         }
     }
 }

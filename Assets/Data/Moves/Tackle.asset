@@ -14,6 +14,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MoveAsset
   displayName: Tackle
   energyCost: 100
-  shape: 0
+  visual: {fileID: 0}
+  area: 0
   range: 1
-  power: 4
+  pierce: 0
+  burstRadius: 0
+  filter: 0
+  delivery: 0
+  hits: 1
+  effects:
+  - kind: 0
+    amount: 4
+    chance: 100

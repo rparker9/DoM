@@ -11,6 +11,7 @@ using Dungeon.Api;
 /// <list type="bullet">
 ///   <item><b>DungeonRunner</b> (this): builds the floor, spawns actors, starts the game, updates it every frame.</item>
 ///   <item><see cref="DungeonView"/>: draws the map and actors, and animates every event.</item>
+///   <item><see cref="CuePlayer"/>: plays the beats of every move (motions, VFX, placeholders).</item>
 ///   <item><see cref="DungeonInput"/>: turns keys into API calls.</item>
 ///   <item><see cref="CameraFollow"/>, <see cref="TurnMarker"/>, <see cref="DungeonHud"/>: camera, turn highlight, debug panel.</item>
 /// </list>
@@ -56,6 +57,7 @@ public sealed class DungeonRunner : MonoBehaviour
     DungeonHud _hud;
     CameraFollow _cameraFollow;
     TurnMarker _turnMarker;
+    CuePlayer _cues;
 
     void Awake()
     {
@@ -66,6 +68,7 @@ public sealed class DungeonRunner : MonoBehaviour
         _hud = GetOrAdd<DungeonHud>();
         _cameraFollow = GetOrAdd<CameraFollow>();
         _turnMarker = GetOrAdd<TurnMarker>();
+        _cues = GetOrAdd<CuePlayer>();
     }
 
     void Start()
@@ -81,7 +84,8 @@ public sealed class DungeonRunner : MonoBehaviour
             return;
         }
 
-        _view.Build(_game);
+        _view.Build(_game, _cues);
+        _cues.Bind(_game, _view);
         _input.Bind(_game);
         _hud.Bind(_game);
         _cameraFollow.Bind(_game, _view);

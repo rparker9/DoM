@@ -64,10 +64,12 @@ public sealed class DungeonHud : MonoBehaviour
         {
             var m = def.Moves[i];
             _text.Append(' ').Append(i + 1).Append("  ").Append(m.Name)
-                 .Append("  power ").Append(m.Effect == MoveEffect.Heal ? "  heals " : "  power ")
                  .Append("  cost ").Append(m.EnergyCost)
-                 .Append(m.Shape == MoveShape.AllAround ? "  all around" : "  range " + m.Range)
-                 .AppendLine();
+                 .Append("  ").Append(m.Area).Append(m.Area == MoveArea.Line || m.Area == MoveArea.Around ? " " + m.Range : "")
+                 .Append(m.Delivery != Delivery.Contact ? "  " + m.Delivery : "")
+                 .Append(m.Hits > 1 ? "  x" + m.Hits : "");
+            foreach (var fx in m.Effects) _text.Append("  ").Append(fx.Kind).Append(' ').Append(fx.Amount);
+            _text.AppendLine();
         }
     }
 

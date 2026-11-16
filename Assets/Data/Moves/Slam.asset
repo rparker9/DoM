@@ -14,6 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MoveAsset
   displayName: Slam
   energyCost: 150
-  shape: 0
+  visual: {fileID: 0}
+  area: 0
   range: 1
-  power: 7
+  pierce: 0
+  burstRadius: 0
+  filter: 0
+  delivery: 0
+  hits: 1
+  effects:
+  - kind: 0
+    amount: 7
+    chance: 100
+  - kind: 2
+    amount: 2
+    chance: 50

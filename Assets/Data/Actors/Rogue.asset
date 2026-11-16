@@ -18,5 +18,7 @@ MonoBehaviour:
   speedPercent: 110
   color: {r: 0.6039216, g: 0.9490196, b: 0.78431374, a: 1}
   moves:
-  - {fileID: 11400000, guid: ea57ad4781b89bd47accf2235b3a97ba, type: 2}
-  - {fileID: 11400000, guid: da21ce14bd6a2c2478966b624d3b8e37, type: 2}
+  - {fileID: 11400000, guid: 3517c75e7a5ede74ab55ed8e1beb9b09, type: 2}
+  - {fileID: 11400000, guid: 3aea8dbb9139265409738c0f911282d5, type: 2}
+  - {fileID: 11400000, guid: a00e0ae58d4b85f4eb5e7aea5bcee48f, type: 2}
+  - {fileID: 11400000, guid: 2dede6162729d0c41849a1cd849719e4, type: 2}

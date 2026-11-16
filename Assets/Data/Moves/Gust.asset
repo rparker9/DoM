@@ -14,6 +14,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MoveAsset
   displayName: Gust
   energyCost: 100
-  shape: 0
+  visual: {fileID: 0}
+  area: 0
   range: 4
-  power: 3
+  pierce: 0
+  burstRadius: 0
+  filter: 0
+  delivery: 1
+  hits: 1
+  effects:
+  - kind: 0
+    amount: 3
+    chance: 100
+  - kind: 2
+    amount: 1
+    chance: 100

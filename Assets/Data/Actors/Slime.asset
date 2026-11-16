@@ -19,3 +19,4 @@ MonoBehaviour:
   color: {r: 0.4, g: 0.8509804, b: 0.4, a: 1}
   moves:
   - {fileID: 11400000, guid: da21ce14bd6a2c2478966b624d3b8e37, type: 2}
+  - {fileID: 11400000, guid: 2dede6162729d0c41849a1cd849719e4, type: 2}

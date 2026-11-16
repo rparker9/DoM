@@ -12,9 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8e556e20c00fc048999300eb1a2d7c9, type: 3}
   m_Name: Mend
   m_EditorClassIdentifier: Assembly-CSharp::MoveAsset
-  displayName: 
-  effect: 1
+  displayName: Mend
   energyCost: 100
-  shape: 1
+  visual: {fileID: 0}
+  area: 1
   range: 1
-  power: 6
+  pierce: 0
+  burstRadius: 0
+  filter: 2
+  delivery: 0
+  hits: 1
+  effects:
+  - kind: 1
+    amount: 6
+    chance: 95

@@ -17,9 +17,9 @@ using Dungeon.Api;
 /// </summary>
 public sealed class DungeonView : MonoBehaviour, IEventAnimator
 {
-    [Header("Animation durations (seconds at normal speed)")]
+    [Header("Animation durations (seconds at normal speed). Move timings live in each MoveVisual.")]
     [SerializeField] float stepDuration = 0.16f;
-    [SerializeField] float moveDuration = 0.22f;
+    [SerializeField] float knockbackDuration = 0.15f;
     [SerializeField] float hurtDuration = 0.18f;
     [SerializeField] float healDuration = 0.25f;
     [SerializeField] float dieDuration = 0.25f;
@@ -27,6 +27,7 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
     const float TileZ = 0.5f;   // floor and walls sit behind the actors (actors are at z = 0)
 
     DungeonGame _game;
+    CuePlayer _cues;   // plays every MoveCue event
 
     /// <summary>One gray box per actor. A box is removed when its death finishes playing.</summary>
     readonly Dictionary<Entity, EntityView> _views = new Dictionary<Entity, EntityView>();
@@ -36,9 +37,12 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
     // =====================================================================================
 
     /// <summary>Creates the map tiles and a box for every actor. Call after spawning, before Begin().</summary>
-    public void Build(DungeonGame game)
+    /// <param name="game">The game to draw.</param>
+    /// <param name="cues">Plays the moves' beats.</param>
+    public void Build(DungeonGame game, CuePlayer cues)
     {
         _game = game;
+        _cues = cues;
         BuildMap();
         foreach (var e in _game.AllActors) SpawnView(e);
     }
@@ -79,7 +83,8 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
         switch (e.Type)
         {
             case SimEventType.Stepped: return stepDuration;
-            case SimEventType.UsedMove: return moveDuration;
+            case SimEventType.Displaced: return knockbackDuration;
+            case SimEventType.MoveCue: return _cues.DurationOf(e);
             case SimEventType.Damaged: return hurtDuration;
             case SimEventType.Healed: return healDuration;
             case SimEventType.Died: return dieDuration;
@@ -87,24 +92,28 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
         }
     }
 
+    /// <summary>Only move beats have hit frames; everything else lets what it causes start at its end.</summary>
+    public double ReleaseOf(SimEvent e) => e.Type == SimEventType.MoveCue ? _cues.ReleaseOf(e) : 1.0;
+
     public void StartAnim(SimEvent e)
     {
         switch (e.Type)
         {
             case SimEventType.Stepped:
+            case SimEventType.Displaced:   // knockback slides the box like a step, without turning it
                 if (TryGetView(e.Actor, out var walker)) walker.BeginStep(e);
                 break;
             case SimEventType.Faced:
                 if (TryGetView(e.Actor, out var turner)) turner.SetFacing(e.DirX, e.DirY);
                 break;
-            case SimEventType.UsedMove:
-                if (TryGetView(e.Actor, out var user)) user.BeginUseMove(e);
+            case SimEventType.MoveCue:
+                _cues.StartCue(e);
                 break;
             case SimEventType.Damaged:
                 if (TryGetView(e.Target, out var victim)) victim.BeginHurt(e.HpAfter);
                 break;
-            case SimEventType.Healed: 
-                if (TryGetView(e.Target, out var healed)) healed.BeginHeal(e.HpAfter); 
+            case SimEventType.Healed:
+                if (TryGetView(e.Target, out var healed)) healed.BeginHeal(e.HpAfter);
                 break;
         }
     }
@@ -114,10 +123,11 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
         switch (e.Type)
         {
             case SimEventType.Stepped:
+            case SimEventType.Displaced:
                 if (TryGetView(e.Actor, out var walker)) walker.TickStep(t);
                 break;
-            case SimEventType.UsedMove:
-                if (TryGetView(e.Actor, out var user)) user.TickUseMove(t);
+            case SimEventType.MoveCue:
+                _cues.TickCue(e, t);
                 break;
             case SimEventType.Damaged:
                 if (TryGetView(e.Target, out var victim)) victim.TickHurt(t);
@@ -136,10 +146,11 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
         switch (e.Type)
         {
             case SimEventType.Stepped:
+            case SimEventType.Displaced:
                 if (TryGetView(e.Actor, out var walker)) walker.EndStep();
                 break;
-            case SimEventType.UsedMove:
-                if (TryGetView(e.Actor, out var user)) user.EndUseMove();
+            case SimEventType.MoveCue:
+                _cues.FinishCue(e);
                 break;
             case SimEventType.Damaged:
                 if (TryGetView(e.Target, out var victim)) victim.EndHurt();

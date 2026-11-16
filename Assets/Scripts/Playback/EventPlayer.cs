@@ -9,6 +9,7 @@ namespace Dungeon.Playback
     public interface IEventAnimator
     {
         double DurationOf(SimEvent e);     // seconds at 1x
+        double ReleaseOf(SimEvent e);      // 0..1: the hit frame, when events it causes may start (1 = at the end)
         void StartAnim(SimEvent e);
         void UpdateAnim(SimEvent e, float t); // t in 0..1
         void FinishAnim(SimEvent e);
@@ -34,11 +35,13 @@ namespace Dungeon.Playback
 
         public EventPlayer(IEventAnimator animator) { _animator = animator; }
 
+        /// <summary>Times an event and queues it to play. Add events in the order they happened.</summary>
         public void Add(SimEvent e)
         {
             bool visible = IsVisible(e);
             double duration = visible ? Math.Max(0, _animator.DurationOf(e)) : 0;
-            var s = Scheduler.Schedule(e, duration, PlaybackTime);
+            double release = visible ? _animator.ReleaseOf(e) : 1;
+            var s = Scheduler.Schedule(e, duration, release, PlaybackTime);
             s.Visible = visible;
 
             int i = _notStarted.Count;

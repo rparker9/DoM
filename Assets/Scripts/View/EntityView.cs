@@ -86,26 +86,39 @@ public sealed class EntityView : MonoBehaviour
     public void TickStep(float t) => transform.position = Vector3.Lerp(_from, _to, Mathf.SmoothStep(0f, 1f, t));
     public void EndStep() { _rest = _to; transform.position = _rest; }
 
-    // ---- UsedMove ----
-    // Line moves lunge toward the facing direction. AllAround moves pulse bigger and back.
-    bool _pulse;
+    // ---- Move wind-up ----
+    ActorMotion _motion;
 
-    public void BeginUseMove(SimEvent e)
+    /// <summary>Starts a wind-up motion.</summary>
+    /// <param name="motion">Which motion to play.</param>
+    /// <param name="dx">Direction x the user faces (for the lunge).</param>
+    /// <param name="dy">Direction y the user faces.</param>
+    public void BeginMotion(ActorMotion motion, int dx, int dy)
     {
-        SetFacing(e.DirX, e.DirY);
-        _pulse = e.Move != null && e.Move.Shape == MoveShape.AllAround;
-        _lunge = new Vector3(e.DirX, e.DirY, 0f).normalized * 0.35f;
+        SetFacing(dx, dy);
+        _motion = motion;
+        _lunge = new Vector3(dx, dy, 0f).normalized * 0.35f;
     }
-    public void TickUseMove(float t)
+
+    /// <param name="t">Progress, 0 to 1.</param>
+    public void TickMotion(float t)
     {
         float wave = Mathf.Sin(t * Mathf.PI);   // 0 -> 1 -> 0
-        if (_pulse) transform.localScale = Vector3.one * (1f + 0.3f * wave);
-        else transform.position = _rest + _lunge * wave;
+        switch (_motion)
+        {
+            case ActorMotion.Lunge: transform.position = _rest + _lunge * wave; break;
+            case ActorMotion.Hop: transform.position = _rest + Vector3.up * 0.3f * wave; break;
+            case ActorMotion.Spin: transform.rotation = Quaternion.Euler(0f, 0f, -360f * t); break;
+            case ActorMotion.Shake: transform.position = _rest + new Vector3(Mathf.Sin(t * 50f) * 0.06f, 0f, 0f); break;
+            case ActorMotion.Pulse: transform.localScale = Vector3.one * (1f + 0.3f * wave); break;
+        }
     }
-    public void EndUseMove()
+
+    public void EndMotion()
     {
-        transform.localScale = Vector3.one;
         transform.position = _rest;
+        transform.rotation = Quaternion.identity;
+        transform.localScale = Vector3.one;
     }
 
     // ---- Damaged ----

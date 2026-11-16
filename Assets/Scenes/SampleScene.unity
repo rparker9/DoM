@@ -286,10 +286,6 @@ MonoBehaviour:
   movesPlayOneAtATime: 1
   viewRadius: 6
   fastForwardSpeed: 4
-  stepDuration: 0.16
-  moveDuration: 0.22
-  hurtDuration: 0.18
-  dieDuration: 0.25
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0

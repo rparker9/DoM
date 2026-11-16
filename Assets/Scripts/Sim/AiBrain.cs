@@ -1,10 +1,11 @@
+using System;
 using System.Collections.Generic;
 
 namespace Dungeon.Sim
 {
     /// <summary>
     /// Picks actions for everyone the player isn't controlling.
-    /// Fighting always works the same way: use the first move in the list that can hit an enemy.
+    /// Every actor picks moves the same way: try them all, score each from its effects, use the best.
     /// </summary>
     public static class AiBrain
     {
@@ -23,12 +24,10 @@ namespace Dungeon.Sim
             return isParty ? DecidePartyMember(w, self) : DecideMonster(w, self);
         }
 
-        /// <summary>Attack if possible, else chase the nearest enemy in sight, else wander.</summary>
+        /// <summary>Use the best move if any is worth it, else chase the nearest enemy in sight, else wander.</summary>
         static GameAction DecideMonster(World w, Entity self)
         {
-            if (TryHeal(w, self, out var heal)) return heal;
-
-            if (TryUseMoveOn(w, self, Entity.None, out var attack)) return attack;
+            if (TryBestMove(w, self, Entity.None, out var move)) return move;
 
             var target = NearestEnemy(w, self, MonsterSight);
             if (target.IsNone) return Wander(w, self);
@@ -42,18 +41,16 @@ namespace Dungeon.Sim
         {
             var orders = w.Orders.Get(self.Id);
 
-            if (TryHeal(w, self, out var heal)) return heal;
-
             // AttackTarget: go after that enemy. If it's dead, fall through to Follow.
             if (orders.Type == OrderType.AttackTarget && w.IsAlive(orders.Target))
             {
-                if (TryUseMoveOn(w, self, orders.Target, out var hitTarget)) return hitTarget;
+                if (TryBestMove(w, self, orders.Target, out var hitTarget)) return hitTarget;
                 var tp = w.Positions.Get(orders.Target.Id);
                 if (TryStepToward(w, self, tp.X, tp.Y, out var chase)) return chase;
             }
 
-            // Every order fights back when an enemy is in reach.
-            if (TryUseMoveOn(w, self, Entity.None, out var attack)) return attack;
+            // Every order fights back, or heals, when there's something worth doing.
+            if (TryBestMove(w, self, Entity.None, out var move)) return move;
             if (orders.Type == OrderType.Hold) return GameAction.Wait();
 
             // Follow: engage nearby enemies without straying from the leader, otherwise regroup.
@@ -71,78 +68,72 @@ namespace Dungeon.Sim
             return GameAction.Wait();
         }
 
-        /// <summary>Finds the first move (in list order) and direction that hits an enemy.</summary>
-        /// <param name="w">The world.</param>
-        /// <param name="self">The actor.</param>
-        /// <param name="mustHit">If set, the move has to hit this entity. Entity.None = any enemy.</param>
-        /// <param name="action">The UseMove action found.</param>
-        /// <returns>False if no move can hit.</returns>
-        static bool TryUseMoveOn(World w, Entity self, Entity mustHit, out GameAction action)
-        {
-            var moves = w.Kinds.Get(self.Id).Def.Moves;
-            for (int slot = 0; slot < moves.Count; slot++)
-            {
-                if (moves[slot].Effect != MoveEffect.Damage) 
-                    continue;   // heals are chosen by TryHeal
-
-                if (moves[slot].Shape == MoveShape.AllAround)
-                {
-                    MoveTargeting.FindTargets(w, self, moves[slot], 0, 0, _targets);
-                    if (Hits(mustHit)) { action = GameAction.UseMove(slot); return true; }
-                    continue;
-                }
-                for (int i = 0; i < 8; i++)
-                {
-                    int dx = Rules.DirX[i], dy = Rules.DirY[i];
-                    MoveTargeting.FindTargets(w, self, moves[slot], dx, dy, _targets);
-                    if (Hits(mustHit)) { action = GameAction.UseMove(slot, dx, dy); return true; }
-                }
-            }
-            action = default;
-            return false;
-        }
-
-        /// <summary>Uses a heal move if it would reach an ally at half HP or less.</summary>
+        /// <summary>Tries every move in every direction and picks the one with the best score.</summary>
         /// <param name="w">The world.</param>
         /// <param name="self">The actor deciding.</param>
+        /// <param name="mustHit">If set, only moves that reach this entity count. Entity.None = any.</param>
         /// <param name="action">The UseMove action found.</param>
-        /// <returns>False if no heal move would help anyone.</returns>
-        static bool TryHeal(World w, Entity self, out GameAction action)
+        /// <returns>False if no move scores above 0 (nothing worth doing).</returns>
+        static bool TryBestMove(World w, Entity self, Entity mustHit, out GameAction action)
         {
+            action = default;
+            int bestScore = 0;
             var moves = w.Kinds.Get(self.Id).Def.Moves;
+
             for (int slot = 0; slot < moves.Count; slot++)
             {
-                if (moves[slot].Effect != MoveEffect.Heal) continue;
-                if (moves[slot].Shape == MoveShape.AllAround)
+                // Only Line moves care about direction; the rest are tried once.
+                int directions = moves[slot].Area == MoveArea.Line ? 8 : 1;
+                for (int i = 0; i < directions; i++)
                 {
-                    MoveTargeting.FindTargets(w, self, moves[slot], 0, 0, _targets);
-                    if (AnyoneHurt(w)) { action = GameAction.UseMove(slot); return true; }
-                    continue;
-                }
-                for (int i = 0; i < 8; i++)
-                {
-                    int dx = Rules.DirX[i], dy = Rules.DirY[i];
+                    int dx = directions == 8 ? Rules.DirX[i] : 0;
+                    int dy = directions == 8 ? Rules.DirY[i] : 0;
                     MoveTargeting.FindTargets(w, self, moves[slot], dx, dy, _targets);
-                    if (AnyoneHurt(w)) { action = GameAction.UseMove(slot, dx, dy); return true; }
+                    if (!mustHit.IsNone && !_targets.Contains(mustHit)) continue;
+
+                    int score = Score(w, self, moves[slot]);
+                    if (score <= bestScore) continue;   // ties keep the earlier move
+                    bestScore = score;
+                    action = directions == 8 ? GameAction.UseMove(slot, dx, dy) : GameAction.UseMove(slot);
                 }
             }
-            action = default;
-            return false;
+            return bestScore > 0;
         }
 
-        /// <summary>Is anyone found by the last FindTargets call at half HP or less?</summary>
-        static bool AnyoneHurt(World w)
+        /// <summary>
+        /// How good the move is against the targets from the last FindTargets call.
+        /// Reads the same effect list the sim runs, so new moves need no AI code.
+        /// </summary>
+        static int Score(World w, Entity self, MoveDef move)
         {
-            foreach (var e in _targets)
+            int attack = w.Kinds.Get(self.Id).Def.Attack;
+            int score = 0;
+            foreach (var target in _targets)
             {
-                var hp = w.Healths.Get(e.Id);
-                if (hp.Hp * 2 <= hp.Max) return true;
+                bool enemy = Rules.IsHostile(w, self, target);
+                var hp = w.Healths.Get(target.Id);
+                foreach (var fx in move.Effects)
+                {
+                    int value = 0;
+                    switch (fx.Kind)
+                    {
+                        case EffectKind.Damage:
+                            int damage = Math.Min(hp.Hp, Math.Max(1, fx.Amount + attack));
+                            value = enemy ? damage : -2 * damage;   // hurting friends is twice as bad
+                            break;
+                        case EffectKind.Heal:
+                            bool badlyHurt = hp.Hp * 2 <= hp.Max;   // only heal at half HP or less
+                            value = enemy ? -fx.Amount : badlyHurt ? 2 * Math.Min(fx.Amount, hp.Max - hp.Hp) : 0;
+                            break;
+                        case EffectKind.Knockback:
+                            value = enemy ? 1 : -1;
+                            break;
+                    }
+                    score += value * fx.Chance / 100;
+                }
             }
-            return false;
+            return score * Math.Max(1, move.Hits);
         }
-
-        /// <summary>Did the last FindTargets call hit mustHit (or anyone, if mustHit is None)?</summary>
-        static bool Hits(Entity mustHit) => mustHit.IsNone ? _targets.Count > 0 : _targets.Contains(mustHit);
 
         /// <summary>Closest enemy within range, ties broken by lowest Id.</summary>
         /// <param name="w">The world.</param>

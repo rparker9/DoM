@@ -22,3 +22,17 @@ Hold Ctrl: fast-forward. M: toggle moves playing one at a time.
 | `Assets/Scripts/Playback` | No | Event timing (locks) and the playback clock |
 | `Assets/Scripts/Api` | No | `DungeonGame`, the class Unity scripts use |
 | `Assets/Scripts/View` | Yes | `DungeonRunner`, gray boxes, ScriptableObject content |
+
+## Making moves
+A move is two assets:
+- **MoveAsset** (Create → Dungeon → Move): what it does. Area (Line, Around, Self, Team), range, pierce,
+  burst radius, filter (who it affects), delivery (Contact, Projectile, Beam), hits, and a list of effects
+  (Damage, Heal, Knockback, Drain, Recoil, each with an amount and a % chance).
+- **MoveVisual** (Create → Dungeon → Move Visual): what it looks like. A wind-up motion, then three phases
+  (wind-up, travel, impact), each with an optional VFX Graph, a duration and a hit frame (release).
+  Without one, the move plays with gray-box placeholders.
+
+Every VFX graph gets these exposed properties if it declares them: `Origin`, `Target`, `Direction`
+(Vector3), `Radius`, `Duration` (float). Timing always comes from the MoveVisual, never the particles.
+
+The AI scores every move from its effects, so new moves need no AI code.
