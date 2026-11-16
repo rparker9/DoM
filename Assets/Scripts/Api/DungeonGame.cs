@@ -45,9 +45,9 @@ namespace Dungeon.Api
     /// <code>
     /// var game = new DungeonGame(seed: 1, width: 26, height: 18, animator: this);
     /// game.SurroundWithWalls();
-    /// game.SpawnPartyMember(DefaultContent.Knight(), 4, 4);   // the first member starts as leader
-    /// game.SpawnPartyMember(DefaultContent.Scout(), 3, 4);
-    /// game.SpawnMonster(DefaultContent.Slime(), 12, 8);
+    /// game.SpawnPartyMember(knightAsset.ToDef(), 4, 4);   // the first member starts as leader
+    /// game.SpawnPartyMember(scoutAsset.ToDef(), 3, 4);
+    /// game.SpawnMonster(slimeAsset.ToDef(), 12, 8);
     /// game.Begin();
     ///
     /// // every frame:

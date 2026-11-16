@@ -20,7 +20,8 @@ using Dungeon.Api;
 ///         <see cref="FinishAnim"/> on this script to move the gray boxes.</item>
 /// </list>
 ///
-/// <para>Content: drag ActorAssets into the slots below. Empty lists use <see cref="DefaultContent"/>.</para>
+/// <para>Content: drag ActorAssets into the Party and Monsters lists. Both need at least one actor;
+/// empty slots are skipped.</para>
 /// <para>The party is a team of equals. The leader is just whichever member you control right now.</para>
 /// </summary>
 public sealed class DungeonRunner : MonoBehaviour, IEventAnimator
@@ -29,7 +30,7 @@ public sealed class DungeonRunner : MonoBehaviour, IEventAnimator
     //  Inspector settings
     // =====================================================================================
 
-    [Header("Content (empty = built-in defaults)")]
+    [Header("Content (both lists need at least one actor)")]
     [Tooltip("Up to 4 equal members. The first starts as leader. Tab or F1-F4 switches who you control.")]
     [SerializeField] List<ActorAsset> party = new List<ActorAsset>();
     [Tooltip("Monsters are picked from this list in turn until Monster Count is reached.")]
@@ -96,7 +97,13 @@ public sealed class DungeonRunner : MonoBehaviour, IEventAnimator
         ApplySettings();
 
         BuildFloor();
-        SpawnActors();
+        if (!SpawnActors())
+        {
+            // Nothing to play. Stop here, and turn this script off so Update and OnGUI
+            // don't run on a half-built game.
+            enabled = false;
+            return;
+        }
 
         BuildMapViews();
         foreach (var e in _game.AllActors) SpawnView(e);
@@ -113,31 +120,31 @@ public sealed class DungeonRunner : MonoBehaviour, IEventAnimator
         _game.AddRandomWalls(randomWalls, keepClearX: StartX, keepClearY: StartY);
     }
 
-    void SpawnActors()
+    /// <summary>
+    /// Spawns the party and the monsters. Returns false, after logging why, when there's nothing
+    /// to play: no actors assigned in the Party or Monsters list.
+    /// </summary>
+    bool SpawnActors()
     {
-        // Check that the party and monster lists aren't empty and aren't unpopulated. If so, end the game immediately.
-        if (party.Count == 0 || monsters.Count == 0)
+        // Empty slots in the Inspector lists are skipped, so one missing actor can't crash the game.
+        var partyAssets = party.FindAll(a => a != null);
+        var monsterAssets = monsters.FindAll(a => a != null);
+
+        if (partyAssets.Count == 0 || monsterAssets.Count == 0)
         {
-            Debug.LogWarning("Party or monster list is empty. Ending game.");
+            Debug.LogWarning("The Party or Monsters list has no actors assigned. Drag ActorAssets into both lists in the Inspector.");
             _game.EndGame();
-            return;
+            return false;
         }
 
-        if (party.TrueForAll(a => a == null) || monsters.TrueForAll(a => a == null))
-        {
-            Debug.LogWarning("Party or monster list is unpopulated. Ending game.");
-            _game.EndGame();
-            return;
-        }
-
-        Debug.Log($"Spawning {party.Count} party members and {monsterCount} monsters on a {width}x{height} floor.");
+        Debug.Log($"Spawning {partyAssets.Count} party members and {monsterCount} monsters on a {width}x{height} floor.");
 
         // The party starts bunched together. The first member spawned starts as leader.
         int[,] partySpots = { { 0, 0 }, { -1, 0 }, { 0, -1 }, { -1, -1 } };
-        int partySize = Mathf.Min(party.Count, MaxPartySize);
+        int partySize = Mathf.Min(partyAssets.Count, MaxPartySize);
         for (int i = 0; i < partySize; i++)
         {
-            var def = party[i].ToDef();
+            var def = partyAssets[i].ToDef();
             Debug.Log($"Spawning party member {def.Name} at ({StartX + partySpots[i, 0]}, {StartY + partySpots[i, 1]})");
             int x = StartX + partySpots[i, 0], y = StartY + partySpots[i, 1];
             if (_game.IsFree(x, y)) _game.SpawnPartyMember(def, x, y);
@@ -146,11 +153,12 @@ public sealed class DungeonRunner : MonoBehaviour, IEventAnimator
         // Monsters go on random free tiles, away from the party.
         for (int i = 0; i < monsterCount; i++)
         {
-            ActorDef def = monsters[i % monsters.Count].ToDef();
+            ActorDef def = monsterAssets[i % monsterAssets.Count].ToDef();
 
             if (_game.TryFindFreeTile(StartX, StartY, minDistance: 6, out int x, out int y))
                 _game.SpawnMonster(def, x, y);
         }
+        return true;
     }
 
     void BuildMapViews()
