@@ -6,6 +6,7 @@ namespace Dungeon.Sim
         Faced,      // Actor turned to Dir (free action)
         UsedMove,   // Actor used Move toward Dir; Targets = every enemy hit (may be empty)
         Damaged,    // Target took Damage from Actor
+        Healed,     // Target got Healing HP back from Actor
         Died        // Actor died at From
     }
 
@@ -24,6 +25,7 @@ namespace Dungeon.Sim
         public int FromX, FromY, ToX, ToY;      // tiles involved; From = To when only one tile matters
         public int DirX, DirY;                  // facing direction, for Stepped, Faced and UsedMove
         public int Damage, HpAfter;             // Damaged only
+        public int Healing;                     // Healed only: HP actually restored
         public bool UsesMove;                   // true for UsedMove; the input gate waits for these
         public int CausedByEventId = -1;        // the event this one follows from, or -1
 

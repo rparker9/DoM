@@ -11,6 +11,9 @@ public sealed class MoveAsset : ScriptableObject
     [Tooltip("Shown in the HUD. Leave empty to use the asset's file name.")]
     public string displayName = "";
 
+    [Tooltip("Damage hurts enemies. Heal restores Power HP to allies instead (AllAround also heals the user).")]
+    public MoveEffect effect = MoveEffect.Damage;
+
     [Tooltip("100 = one normal turn. Cheaper moves let the user act again sooner.")]
     [Min(1)] public int energyCost = 100;
 
@@ -27,6 +30,7 @@ public sealed class MoveAsset : ScriptableObject
     public MoveDef ToDef() => new MoveDef
     {
         Name = string.IsNullOrEmpty(displayName) ? name : displayName,
+        Effect = effect,
         EnergyCost = energyCost,
         Shape = shape,
         Range = range,

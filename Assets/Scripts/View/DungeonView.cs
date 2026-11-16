@@ -21,6 +21,7 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
     [SerializeField] float stepDuration = 0.16f;
     [SerializeField] float moveDuration = 0.22f;
     [SerializeField] float hurtDuration = 0.18f;
+    [SerializeField] float healDuration = 0.25f;
     [SerializeField] float dieDuration = 0.25f;
 
     const float TileZ = 0.5f;   // floor and walls sit behind the actors (actors are at z = 0)
@@ -80,6 +81,7 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
             case SimEventType.Stepped: return stepDuration;
             case SimEventType.UsedMove: return moveDuration;
             case SimEventType.Damaged: return hurtDuration;
+            case SimEventType.Healed: return healDuration;
             case SimEventType.Died: return dieDuration;
             default: return 0;   // Faced: turning is instant
         }
@@ -101,6 +103,9 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
             case SimEventType.Damaged:
                 if (TryGetView(e.Target, out var victim)) victim.BeginHurt(e.HpAfter);
                 break;
+            case SimEventType.Healed: 
+                if (TryGetView(e.Target, out var healed)) healed.BeginHeal(e.HpAfter); 
+                break;
         }
     }
 
@@ -116,6 +121,9 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
                 break;
             case SimEventType.Damaged:
                 if (TryGetView(e.Target, out var victim)) victim.TickHurt(t);
+                break;
+            case SimEventType.Healed:
+                if (TryGetView(e.Target, out var healed)) healed.TickHeal(t);
                 break;
             case SimEventType.Died:
                 if (TryGetView(e.Actor, out var dying)) dying.TickDie(t);
@@ -135,6 +143,9 @@ public sealed class DungeonView : MonoBehaviour, IEventAnimator
                 break;
             case SimEventType.Damaged:
                 if (TryGetView(e.Target, out var victim)) victim.EndHurt();
+                break;
+            case SimEventType.Healed:
+                if (TryGetView(e.Target, out var healed)) healed.EndHeal();
                 break;
             case SimEventType.Died:
                 // The sim destroyed this actor long ago; only now does its box go away.

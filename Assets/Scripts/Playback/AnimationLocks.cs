@@ -39,6 +39,9 @@ namespace Dungeon.Playback
                 case SimEventType.Damaged:
                     into.Add(LockFor(e.Target));
                     break;
+                case SimEventType.Healed:
+                    into.Add(LockFor(e.Target));
+                    break;
                 case SimEventType.Died:
                     // The tile too: anyone stepping into this tile later waits for the death to play.
                     into.Add(LockFor(e.Actor));

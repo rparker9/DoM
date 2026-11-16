@@ -26,6 +26,8 @@ namespace Dungeon.Sim
         /// <summary>Attack if possible, else chase the nearest enemy in sight, else wander.</summary>
         static GameAction DecideMonster(World w, Entity self)
         {
+            if (TryHeal(w, self, out var heal)) return heal;
+
             if (TryUseMoveOn(w, self, Entity.None, out var attack)) return attack;
 
             var target = NearestEnemy(w, self, MonsterSight);
@@ -39,6 +41,8 @@ namespace Dungeon.Sim
         static GameAction DecidePartyMember(World w, Entity self)
         {
             var orders = w.Orders.Get(self.Id);
+
+            if (TryHeal(w, self, out var heal)) return heal;
 
             // AttackTarget: go after that enemy. If it's dead, fall through to Follow.
             if (orders.Type == OrderType.AttackTarget && w.IsAlive(orders.Target))
@@ -78,6 +82,9 @@ namespace Dungeon.Sim
             var moves = w.Kinds.Get(self.Id).Def.Moves;
             for (int slot = 0; slot < moves.Count; slot++)
             {
+                if (moves[slot].Effect != MoveEffect.Damage) 
+                    continue;   // heals are chosen by TryHeal
+
                 if (moves[slot].Shape == MoveShape.AllAround)
                 {
                     MoveTargeting.FindTargets(w, self, moves[slot], 0, 0, _targets);
@@ -92,6 +99,45 @@ namespace Dungeon.Sim
                 }
             }
             action = default;
+            return false;
+        }
+
+        /// <summary>Uses a heal move if it would reach an ally at half HP or less.</summary>
+        /// <param name="w">The world.</param>
+        /// <param name="self">The actor deciding.</param>
+        /// <param name="action">The UseMove action found.</param>
+        /// <returns>False if no heal move would help anyone.</returns>
+        static bool TryHeal(World w, Entity self, out GameAction action)
+        {
+            var moves = w.Kinds.Get(self.Id).Def.Moves;
+            for (int slot = 0; slot < moves.Count; slot++)
+            {
+                if (moves[slot].Effect != MoveEffect.Heal) continue;
+                if (moves[slot].Shape == MoveShape.AllAround)
+                {
+                    MoveTargeting.FindTargets(w, self, moves[slot], 0, 0, _targets);
+                    if (AnyoneHurt(w)) { action = GameAction.UseMove(slot); return true; }
+                    continue;
+                }
+                for (int i = 0; i < 8; i++)
+                {
+                    int dx = Rules.DirX[i], dy = Rules.DirY[i];
+                    MoveTargeting.FindTargets(w, self, moves[slot], dx, dy, _targets);
+                    if (AnyoneHurt(w)) { action = GameAction.UseMove(slot, dx, dy); return true; }
+                }
+            }
+            action = default;
+            return false;
+        }
+
+        /// <summary>Is anyone found by the last FindTargets call at half HP or less?</summary>
+        static bool AnyoneHurt(World w)
+        {
+            foreach (var e in _targets)
+            {
+                var hp = w.Healths.Get(e.Id);
+                if (hp.Hp * 2 <= hp.Max) return true;
+            }
             return false;
         }
 

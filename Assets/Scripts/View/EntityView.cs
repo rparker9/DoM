@@ -117,6 +117,13 @@ public sealed class EntityView : MonoBehaviour
     }
     public void EndHurt() { _body.material.color = _color; transform.position = _rest; }
 
+    // ---- Healed ----
+    static readonly Color HealGlow = new Color(0.4f, 1f, 0.5f);
+
+    public void BeginHeal(int hpAfter) => SetHp(hpAfter);
+    public void TickHeal(float t) => _body.material.color = Color.Lerp(HealGlow, _color, t);
+    public void EndHeal() => _body.material.color = _color;
+
     // ---- Died ----
     public void TickDie(float t) => transform.localScale = Vector3.one * (1f - t);
     public void EndDie() => Destroy(gameObject);

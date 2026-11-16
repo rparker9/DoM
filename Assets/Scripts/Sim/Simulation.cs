@@ -219,8 +219,15 @@ namespace Dungeon.Sim
                 UsesMove = true
             });
 
-            int damage = Math.Max(1, move.Power + def.Attack);
-            foreach (var victim in targets) DealDamage(e, victim, damage, used.Id);
+            if (move.Effect == MoveEffect.Heal)
+            {
+                foreach (var ally in targets) Heal(e, ally, move.Power, used.Id);
+            }
+            else
+            {
+                int damage = Math.Max(1, move.Power + def.Attack);
+                foreach (var victim in targets) DealDamage(e, victim, damage, used.Id);
+            }
 
             return Math.Max(1, move.EnergyCost);
         }
@@ -253,6 +260,35 @@ namespace Dungeon.Sim
                 FromX = pos.X, FromY = pos.Y, ToX = pos.X, ToY = pos.Y, CausedByEventId = hurt.Id
             });
             World.Destroy(victim);
+        }
+
+        /// <summary>Restores HP, never above max.</summary>
+        /// <param name="healer">Who used the move.</param>
+        /// <param name="ally">Who gets the HP.</param>
+        /// <param name="amount">How much to restore.</param>
+        /// <param name="causeEventId">The UsedMove event, so playback shows the move first.</param>
+        void Heal(Entity healer, Entity ally, int amount, int causeEventId)
+        {
+            if (!World.IsAlive(ally)) return;
+            var pos = World.Positions.Get(ally.Id);
+
+            ref var hp = ref World.Healths.Get(ally.Id);
+            int before = hp.Hp;
+            hp.Hp = Math.Min(hp.Max, hp.Hp + amount);
+
+            World.Record(new SimEvent
+            {
+                Type = SimEventType.Healed,
+                Actor = healer,
+                Target = ally,
+                FromX = pos.X,
+                FromY = pos.Y,
+                ToX = pos.X,
+                ToY = pos.Y,
+                Healing = hp.Hp - before,
+                HpAfter = hp.Hp,
+                CausedByEventId = causeEventId
+            });
         }
     }
 }

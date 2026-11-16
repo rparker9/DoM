@@ -8,10 +8,17 @@ namespace Dungeon.Sim
         AllAround   // all 8 tiles around the user
     }
 
+    public enum MoveEffect
+    {
+        Damage,   // hurts enemies
+        Heal      // restores HP to allies
+    }
+
     /// <summary>A move (attack or skill) as plain data. Made from a MoveAsset in Unity. Only enemies are hit.</summary>
     public sealed class MoveDef
     {
         public string Name = "Tackle";
+        public MoveEffect Effect = MoveEffect.Damage;   // Heal: Power = HP restored, hits allies instead
         public int EnergyCost = 100;           // 100 = one turn; cheaper moves let the user act again sooner
         public MoveShape Shape = MoveShape.Line;
         public int Range = 1;                  // Line only: tiles ahead, 1 = adjacent
